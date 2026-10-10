@@ -1,0 +1,21 @@
+name: Weekly smoke test
+
+# Re-verify the serving contract between deploys: the pipeline republishes
+# data every Monday; this checks the consumer path still works on Tuesday.
+# NOTE: GitHub pauses cron schedules after ~60 days without repo activity —
+# if this repo goes quiet, re-enable the workflow from the Actions tab.
+
+on:
+  schedule:
+    - cron: "30 9 * * 2" # Tuesdays 09:30 UTC, after the pipeline's Monday run
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/smoke_test.mjs

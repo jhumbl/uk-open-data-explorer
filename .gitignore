@@ -1,0 +1,11 @@
+node_modules/
+dist/
+*.local
+.DS_Store
+
+# Agent tooling stays local — except the charts skill, which is the
+# project's chart design language (CLAUDE.md · Dataviz conventions)
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/charts/
