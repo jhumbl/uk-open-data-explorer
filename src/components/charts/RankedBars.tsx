@@ -110,7 +110,15 @@ export default function RankedBars({
       [0, iw],
     );
     if (domainMax === undefined) x.nice(4);
-    const xTicks = ticks ?? x.ticks(4).filter((t) => t > 0);
+    // ~4 ticks, fewer when the plot is narrow (phones), so compact
+    // labels like "1.5bn" never collide: about one per 56px.
+    const count = Math.max(2, Math.min(4, Math.floor(iw / 56)));
+    const xTicks: number[] = [];
+    for (const t of ticks ?? x.ticks(count)) {
+      if (t <= 0) continue;
+      const prev = xTicks[xTicks.length - 1];
+      if (prev === undefined || x(t) - x(prev) >= 40) xTicks.push(t);
+    }
     return { x, xTicks };
   }, [rows, iw, domainMax, ticks]);
 

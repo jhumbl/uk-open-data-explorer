@@ -69,7 +69,14 @@ export default function LineChart({
         .y0(ih)
         .y1((p) => y(p.value))(points) ?? "";
     const yTicks = y.ticks(4).filter((t) => t > 0);
-    const tickStep = Math.max(1, Math.ceil(points.length / 6));
+    // ~6 x ticks, fewer when narrow (phones) so labels like "2011 Q4"
+    // never collide: at least ~64px between tick centres.
+    const pitch = points.length > 1 ? iw / (points.length - 1) : iw;
+    const tickStep = Math.max(
+      1,
+      Math.ceil(points.length / 6),
+      Math.ceil(64 / Math.max(pitch, 1)),
+    );
     const xTickIdx = points
       .map((_, i) => i)
       .filter((i) => i % tickStep === 0);

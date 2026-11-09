@@ -491,6 +491,12 @@ th.num {
 .dash-grid .tall {
   grid-row: span 2;
 }
+/* Grid items default to min-width: auto, so a wide table (or any
+   intrinsically wide child) widens its track past the viewport instead
+   of scrolling inside .table-wrap. Let cards shrink to the track. */
+.dash-grid > * {
+  min-width: 0;
+}
 .dash-grid .full {
   grid-column: 1 / -1;
 }
@@ -729,6 +735,10 @@ svg .end-label {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  /* may shrink below its select's natural width (a select sizes to its
+     longest option — station names run to ~35 characters) */
+  min-width: 0;
+  max-width: 100%;
 }
 .filter-bar .filter-group:not(:first-child) {
   margin-left: 8px;
@@ -741,6 +751,9 @@ svg .end-label {
   font: inherit;
   font-size: 0.82rem;
   color: var(--text-primary);
+  min-width: 0;
+  max-width: 100%;
+  text-overflow: ellipsis;
 }
 .filter-bar .reset {
   border: none;
