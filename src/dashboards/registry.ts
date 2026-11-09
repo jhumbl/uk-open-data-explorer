@@ -94,6 +94,20 @@ export const DASHBOARDS: DashboardMeta[] = [
     load: () => import("./transport-recovery/TransportRecoveryDashboard"),
   },
   {
+    id: "station-usage",
+    title: "Rail station usage",
+    topic: "Transport",
+    source: "ORR · Table 1415 · annual",
+    question:
+      "Which stations carry Britain’s rail passengers — and how has that changed since 1997?",
+    blurb:
+      "Estimated entries and exits at every mainline station in Great Britain, each year since 1997-98 (ORR Table 1415) — ranked by region and station, with each one's history and the year's biggest movers.",
+    family: "orr-station-usage",
+    files: ["orr_1415_station_usage.parquet"],
+    wide: true,
+    load: () => import("./station-usage/StationUsageDashboard"),
+  },
+  {
     id: "london-trees",
     title: "London’s public trees",
     topic: "Environment",

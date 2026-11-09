@@ -169,7 +169,11 @@ export default function MultiLineChart({
 
   return (
     <>
-      <Legend items={series.map((s) => ({ label: s.name, color: s.color }))} />
+      {/* ≥2 series always get a legend; one series never does (the card
+          title names it) — so a single gappy series can use this chart. */}
+      {series.length >= 2 && (
+        <Legend items={series.map((s) => ({ label: s.name, color: s.color }))} />
+      )}
       <ChartFrame
         wrapRef={ref}
         width={width}
