@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { loadTable, query } from "../../lib/duckdb";
+import { columnDomain, extendVocab, type VocabEntry } from "../../lib/vocab";
 import { hfFileUrl, hfRepoUrl } from "../../lib/catalog";
 import {
   buildWhere,
@@ -97,15 +98,21 @@ const LOAD_GEO = `
   WHERE regexp_matches(ons_code, '${LA_RE}')
 `;
 
-/** DfT's fuel categories: raw value → chart/filter label → prose noun. */
-const FUELS = [
+/** DfT's fuel categories: raw value → chart/filter label → prose noun.
+    An open vocabulary: fuels DfT adds are appended from the data
+    (lib/vocab.ts). */
+interface Fuel extends VocabEntry {
+  noun: string;
+}
+const FUELS: readonly Fuel[] = [
   { value: "Battery electric", label: "Battery electric", noun: "battery-electric ULEVs" },
   { value: "Plug-in hybrid electric (petrol)", label: "PHEV petrol", noun: "petrol plug-in hybrids" },
   { value: "Plug-in hybrid electric (diesel)", label: "PHEV diesel", noun: "diesel plug-in hybrids" },
   { value: "Other fuel types", label: "Other", noun: "other-fuel ULEVs" },
-] as const;
+];
 const fuelLabel = (raw: string) => FUELS.find((x) => x.value === raw)?.label ?? raw;
-const fuelNoun = (raw: string) => FUELS.find((x) => x.value === raw)?.noun ?? raw;
+const fuelNoun = (raw: string) =>
+  FUELS.find((x) => x.value === raw)?.noun ?? `${raw} ULEVs`;
 
 const KEEPS = [
   { value: "Private", label: "Private", noun: "privately kept" },
@@ -177,6 +184,8 @@ interface Data {
   yr: number | null;
   fleet: number | null;
   fleetYr: number | null;
+  /** The bins: curated entries plus any fuel the data adds. */
+  fuels: Fuel[];
   fuelMix: CategoryBar[];
   regionsRaw: RegionStat[];
   ukRef: { n: number; total: number } | null;
@@ -220,7 +229,8 @@ async function runQueries(f: FilterState<Dim>): Promise<Data> {
     ${buildWhere([cube("keepership", "keepership"), cube("region", "ons_code")])}
   `);
 
-  // Fuel mix — excludes the fuel filter; fixed four bins, zero-filled.
+  // Fuel mix — excludes the fuel filter; fixed bins (the curated four
+  // plus any fuel DfT adds), zero-filled.
   const fuelRaw = await query<{ fuel: string; n: number | null }>(`
     SELECT fuel, count AS n
     FROM ${T_ULEV}
@@ -232,7 +242,12 @@ async function runQueries(f: FilterState<Dim>): Promise<Data> {
     ])}
   `);
   const fuelTotal = fuelRaw.reduce((s, r) => s + (r.n ?? 0), 0);
-  const fuelMix: CategoryBar[] = FUELS.map((x) => {
+  const fuels = extendVocab(
+    FUELS,
+    await columnDomain(T_ULEV, "fuel"),
+    (raw) => ({ value: raw, label: raw, noun: `${raw} ULEVs` }),
+  );
+  const fuelMix: CategoryBar[] = fuels.map((x) => {
     const n = fuelRaw.find((r) => r.fuel === x.value)?.n ?? 0;
     return { label: x.label, value: n, share: fuelTotal > 0 ? n / fuelTotal : 0 };
   });
@@ -329,6 +344,7 @@ async function runQueries(f: FilterState<Dim>): Promise<Data> {
     yr: ulevNow.yr,
     fleet: fleetNow.n,
     fleetYr: fleetNow.yr,
+    fuels,
     fuelMix,
     regionsRaw,
     ukRef,
@@ -554,7 +570,7 @@ export default function UlevUptakeDashboard() {
             label="Filter by fuel"
             options={[
               { value: "", label: "All fuels" },
-              ...FUELS.map((x) => ({ value: x.value as string, label: x.label })),
+              ...(data?.fuels ?? FUELS).map((x) => ({ value: x.value, label: x.label })),
             ]}
             value={f.fuel ?? ""}
             onChange={(v) => set("fuel", v === "" ? null : v)}
@@ -685,7 +701,7 @@ export default function UlevUptakeDashboard() {
               height={CHART_HEIGHT}
               selected={f.fuel ? fuelLabel(f.fuel) : null}
               onSelect={(label) => {
-                const raw = FUELS.find((x) => x.label === label)?.value;
+                const raw = data.fuels.find((x) => x.label === label)?.value;
                 if (raw) toggle("fuel", raw);
               }}
               formatTick={fmtCompact}

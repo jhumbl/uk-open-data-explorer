@@ -168,7 +168,12 @@ Measured in-browser against the live HF files, 2026-07:
   with margins pinned. Counts are a **stock** (licensed at quarter end),
   not a flow. Sanity anchors: ~41.5M vehicles, ~2.79M ULEVs (2025 Q4).
   And VEH0105's `count_thousands` is in THOUSANDS; VEH0132's `count` is
-  units.
+  units. `fuel` and `body_type` are **open vocabularies** that DfT
+  extends: build chart bins with `lib/vocab.ts` (curated order/labels +
+  any new value from the loaded table), never a fixed list alone, or a
+  new category silently drops out of the bars while still counting in
+  the shares' denominator. Values are Title/sentence case ('Private',
+  'Petrol'); DfT re-cased them from ALL-CAPS once already.
 - **FSA `rating_value` is a string** (0–5 but also 'Exempt',
   'AwaitingInspection', 'AwaitingPublication'); component scores count
   points *deducted* — lower is better.

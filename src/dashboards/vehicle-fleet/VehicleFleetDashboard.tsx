@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { loadTable, query } from "../../lib/duckdb";
+import { columnDomain, extendVocab, type VocabEntry } from "../../lib/vocab";
 import { hfFileUrl, hfRepoUrl } from "../../lib/catalog";
 import {
   buildWhere,
@@ -97,26 +98,34 @@ const LOAD_GEO = `
 `;
 
 /** DfT's body types: raw value → chart/filter label → prose noun.
-    Fixed bin order = UK size order, largest first. */
-const BODIES = [
+    Fixed bin order = UK size order, largest first. An open vocabulary:
+    values DfT adds are appended from the data (lib/vocab.ts). */
+interface Body extends VocabEntry {
+  noun: string;
+}
+const BODIES: readonly Body[] = [
   { value: "Cars", label: "Cars", noun: "cars" },
   { value: "Light goods vehicles", label: "LGVs", noun: "light goods vehicles" },
   { value: "Motorcycles", label: "Motorcycles", noun: "motorcycles" },
   { value: "Other vehicles", label: "Other", noun: "other vehicles" },
   { value: "Heavy goods vehicles", label: "HGVs", noun: "heavy goods vehicles" },
   { value: "Buses and coaches", label: "Buses", noun: "buses and coaches" },
-] as const;
+];
 const bodyLabel = (raw: string) => BODIES.find((x) => x.value === raw)?.label ?? raw;
 const bodyNoun = (raw: string) => BODIES.find((x) => x.value === raw)?.noun ?? raw;
 
 /** DfT's fuel categories for this table. Plug-ins are NOT a category:
-    battery electrics and plug-in hybrids sit inside 'Other fuel types'. */
-const FUELS = [
+    battery electrics and plug-in hybrids sit inside 'Other fuel types'.
+    An open vocabulary, like BODIES. */
+interface Fuel extends VocabEntry {
+  adj: string;
+}
+const FUELS: readonly Fuel[] = [
   { value: "Petrol", label: "Petrol", adj: "petrol" },
   { value: "Diesel", label: "Diesel", adj: "diesel" },
   { value: "Other fuel types", label: "Other fuels", adj: "other-fuel" },
   { value: "Hybrid electric (petrol)", label: "Hybrid (petrol)", adj: "petrol-hybrid" },
-] as const;
+];
 const fuelLabel = (raw: string) => FUELS.find((x) => x.value === raw)?.label ?? raw;
 const fuelAdj = (raw: string) => FUELS.find((x) => x.value === raw)?.adj ?? raw;
 
@@ -187,6 +196,9 @@ interface Data {
   n: number | null;
   yr: number | null;
   decade: number | null;
+  /** The bins: curated entries plus any value the data adds. */
+  bodies: Body[];
+  fuels: Fuel[];
   bodyMix: CategoryBar[];
   fuelMix: CategoryBar[];
   regionsRaw: RegionStat[];
@@ -264,12 +276,18 @@ async function runQueries(f: FilterState<Dim>): Promise<Data> {
     ])}
   `);
   const bodyTotal = bodyRaw.reduce((s, r) => s + (r.n ?? 0), 0);
-  const bodyMix: CategoryBar[] = BODIES.map((x) => {
+  const bodies = extendVocab(
+    BODIES,
+    await columnDomain(T_FLEET, "body_type"),
+    (raw) => ({ value: raw, label: raw, noun: raw }),
+  );
+  const bodyMix: CategoryBar[] = bodies.map((x) => {
     const n = bodyRaw.find((r) => r.k === x.value)?.n ?? 0;
     return { label: x.label, value: n, share: bodyTotal > 0 ? n / bodyTotal : 0 };
   });
 
-  // Fuel mix — excludes the fuel filter; fixed four bins, zero-filled.
+  // Fuel mix — excludes the fuel filter; fixed bins (the curated four
+  // plus any fuel DfT adds), zero-filled.
   const fuelRaw = await query<{ k: string; n: number | null }>(`
     SELECT fuel AS k, n
     FROM ${T_FLEET}
@@ -282,7 +300,12 @@ async function runQueries(f: FilterState<Dim>): Promise<Data> {
     ])}
   `);
   const fuelTotal = fuelRaw.reduce((s, r) => s + (r.n ?? 0), 0);
-  const fuelMix: CategoryBar[] = FUELS.map((x) => {
+  const fuels = extendVocab(
+    FUELS,
+    await columnDomain(T_FLEET, "fuel"),
+    (raw) => ({ value: raw, label: raw, adj: raw }),
+  );
+  const fuelMix: CategoryBar[] = fuels.map((x) => {
     const n = fuelRaw.find((r) => r.k === x.value)?.n ?? 0;
     return { label: x.label, value: n, share: fuelTotal > 0 ? n / fuelTotal : 0 };
   });
@@ -399,6 +422,8 @@ async function runQueries(f: FilterState<Dim>): Promise<Data> {
     n: now.n,
     yr: now.yr,
     decade: now.decade,
+    bodies,
+    fuels,
     bodyMix,
     fuelMix,
     regionsRaw,
@@ -630,7 +655,7 @@ export default function VehicleFleetDashboard() {
             label="Filter by body type"
             options={[
               { value: "", label: "All body types" },
-              ...BODIES.map((x) => ({ value: x.value as string, label: x.value as string })),
+              ...(data?.bodies ?? BODIES).map((x) => ({ value: x.value, label: x.value })),
             ]}
             value={f.body ?? ""}
             onChange={(v) => set("body", v === "" ? null : v)}
@@ -642,7 +667,7 @@ export default function VehicleFleetDashboard() {
             label="Filter by fuel"
             options={[
               { value: "", label: "All fuels" },
-              ...FUELS.map((x) => ({ value: x.value as string, label: x.label })),
+              ...(data?.fuels ?? FUELS).map((x) => ({ value: x.value, label: x.label })),
             ]}
             value={f.fuel ?? ""}
             onChange={(v) => set("fuel", v === "" ? null : v)}
@@ -762,7 +787,7 @@ export default function VehicleFleetDashboard() {
               height={CHART_HEIGHT}
               selected={f.body ? bodyLabel(f.body) : null}
               onSelect={(label) => {
-                const raw = BODIES.find((x) => x.label === label)?.value;
+                const raw = data.bodies.find((x) => x.label === label)?.value;
                 if (raw) toggle("body", raw);
               }}
               formatTick={fmtCompact}
@@ -850,7 +875,7 @@ export default function VehicleFleetDashboard() {
               height={CHART_HEIGHT}
               selected={f.fuel ? fuelLabel(f.fuel) : null}
               onSelect={(label) => {
-                const raw = FUELS.find((x) => x.label === label)?.value;
+                const raw = data.fuels.find((x) => x.label === label)?.value;
                 if (raw) toggle("fuel", raw);
               }}
               formatTick={fmtCompact}
