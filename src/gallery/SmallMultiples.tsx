@@ -8,7 +8,14 @@ import ChartFrame, {
 } from "../components/charts/ChartFrame";
 import ChartTooltip from "../components/charts/ChartTooltip";
 import { useActiveIndex } from "../components/charts/useActiveIndex";
-import type { Series } from "./MultiLineChart";
+/** Small multiples have no gaps to draw (every panel is a complete
+    series), so values are plain numbers — narrower than MultiLineChart's
+    nullable Series, which callers can still pass when gap-free. */
+export interface Series {
+  name: string;
+  color: string;
+  values: number[];
+}
 
 interface Props {
   labels: string[];

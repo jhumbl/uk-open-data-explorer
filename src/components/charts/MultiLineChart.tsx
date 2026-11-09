@@ -6,17 +6,28 @@ import ChartFrame, {
   innerSize,
   useContainerWidth,
   type Margin,
-} from "../components/charts/ChartFrame";
-import ChartTooltip from "../components/charts/ChartTooltip";
-import Legend from "../components/charts/Legend";
-import { useActiveIndex } from "../components/charts/useActiveIndex";
+} from "./ChartFrame";
+import ChartTooltip from "./ChartTooltip";
+import Legend from "./Legend";
+import { useActiveIndex } from "./useActiveIndex";
 
 export interface Series {
   name: string;
   /** A series token, e.g. "var(--series-2)" — never raw hex. */
   color: string;
-  /** One value per label, in label order. */
-  values: number[];
+  /** One value per label, in label order. null = no figure (the series
+      hadn't started, or the publisher gives none) — the line breaks
+      there rather than dropping to zero. */
+  values: (number | null)[];
+}
+
+/** A labelled shaded span on the x-axis (e.g. "Covid years") — context
+    the reader needs to read the lines, drawn under them. */
+export interface Band {
+  /** First and last label covered (inclusive). */
+  from: string;
+  to: string;
+  label: string;
 }
 
 interface Props {
@@ -27,12 +38,22 @@ interface Props {
   /** Full-precision formatter for the tooltip (e.g. "2,516"). */
   formatValue: (v: number) => string;
   ariaLabel: string;
+  height?: number;
+  /** Which label indices get an x tick. Defaults to ~6 evenly spaced. */
+  xTicks?: number[];
+  /** Display text for an x tick. Defaults to the label itself. */
+  formatXTick?: (label: string) => string;
+  /** Tooltip header for a label. Defaults to the label itself. */
+  tipHeader?: (label: string) => string;
+  band?: Band;
 }
 
-const HEIGHT = 300;
+const DEFAULT_HEIGHT = 300;
 const MARGIN: Margin = { top: 18, right: 64, bottom: 32, left: 48 };
 /** Minimum vertical separation between end labels (≈ one line height). */
 const LABEL_GAP = 14;
+/** Minimum horizontal pitch between x tick labels. */
+const MIN_TICK_GAP = 44;
 
 /**
  * Categorical multi-series line chart: 2px lines in the validated series
@@ -42,10 +63,12 @@ const LABEL_GAP = 14;
  * with ≥2 series; the wash is a single-series device. Colour follows the
  * entity: callers assign each series its token once and keep it through
  * filtering. Capped at the four validated slots — more series means
- * small multiples (see SmallMultiples), "Other", or a different question.
+ * small multiples (see gallery/SmallMultiples), "Other", or a different
+ * question.
  *
- * Gallery-local until a dashboard needs it (see CLAUDE.md · Charting);
- * previewed at #/charts-template first, per the gallery's contract.
+ * Promoted from the gallery when transport-recovery became its first
+ * dashboard consumer (2026-11), gaining null gaps, an optional band,
+ * and caller-chosen x ticks for long series.
  *
  * Data changes snap — transitions were tried and reverted (see the
  * charts skill · Transitions); don't reintroduce them ad hoc.
@@ -74,37 +97,62 @@ function dodge(desired: number[], gap: number, lo: number, hi: number): number[]
   return out;
 }
 
+/** Index of the last non-null value, or -1. */
+function lastDefined(values: (number | null)[]): number {
+  for (let i = values.length - 1; i >= 0; i--) if (values[i] !== null) return i;
+  return -1;
+}
+
 export default function MultiLineChart({
   labels,
   series,
   formatTick,
   formatValue,
   ariaLabel,
+  height = DEFAULT_HEIGHT,
+  xTicks,
+  formatXTick = (l) => l,
+  tipHeader = (l) => l,
+  band,
 }: Props) {
   const { ref, width } = useContainerWidth();
-  const { iw, ih } = innerSize(width, HEIGHT, MARGIN);
+  const { iw, ih } = innerSize(width, height, MARGIN);
   const { active, setActive, onKeyDown, clear } = useActiveIndex(labels.length);
 
-  const { x, y, paths, endLabelY, yTicks, xTickIdx } = useMemo(() => {
+  const { x, y, paths, ends, endLabelY, yTicks, xTickIdx } = useMemo(() => {
     const x = d3.scalePoint(labels, [0, iw]);
-    const yMax = d3.max(series, (s) => d3.max(s.values)) ?? 1;
+    const yMax =
+      d3.max(series, (s) => d3.max(s.values, (v) => v ?? undefined)) ?? 1;
     const y = d3.scaleLinear([0, yMax], [ih, 0]).nice();
     const line = d3
-      .line<number>()
+      .line<number | null>()
+      .defined((v) => v !== null)
       .x((_, i) => x(labels[i])!)
-      .y((v) => y(v));
+      .y((v) => y(v as number));
     const paths = series.map((s) => line(s.values) ?? "");
+    const ends = series.map((s) => lastDefined(s.values));
     const endLabelY = dodge(
-      series.map((s) => y(s.values[s.values.length - 1])),
+      series.map((s, si) =>
+        ends[si] >= 0 ? y(s.values[ends[si]] as number) : ih,
+      ),
       LABEL_GAP,
       0,
       ih,
     );
     const yTicks = y.ticks(4).filter((t) => t > 0);
     const tickStep = Math.max(1, Math.ceil(labels.length / 6));
-    const xTickIdx = labels.map((_, i) => i).filter((i) => i % tickStep === 0);
-    return { x, y, paths, endLabelY, yTicks, xTickIdx };
-  }, [labels, series, iw, ih]);
+    const wanted =
+      xTicks ?? labels.map((_, i) => i).filter((i) => i % tickStep === 0);
+    // Thin caller ticks on narrow charts so labels never collide.
+    const xTickIdx: number[] = [];
+    for (const i of wanted) {
+      const prev = xTickIdx[xTickIdx.length - 1];
+      if (prev === undefined || x(labels[i])! - x(labels[prev])! >= MIN_TICK_GAP) {
+        xTickIdx.push(i);
+      }
+    }
+    return { x, y, paths, ends, endLabelY, yTicks, xTickIdx };
+  }, [labels, series, iw, ih, xTicks]);
 
   if (labels.length === 0 || series.length === 0) return null;
 
@@ -116,6 +164,8 @@ export default function MultiLineChart({
   };
 
   const activeX = active !== null ? (x(labels[active]) ?? 0) : 0;
+  const bandX0 = band ? x(band.from) : undefined;
+  const bandX1 = band ? x(band.to) : undefined;
 
   return (
     <>
@@ -123,7 +173,7 @@ export default function MultiLineChart({
       <ChartFrame
         wrapRef={ref}
         width={width}
-        height={HEIGHT}
+        height={height}
         margin={MARGIN}
         ariaLabel={ariaLabel}
         onKeyDown={onKeyDown}
@@ -131,12 +181,15 @@ export default function MultiLineChart({
         overlay={
           active !== null && (
             <ChartTooltip
-              label={labels[active]}
-              rows={series.map((s) => ({
-                color: s.color,
-                label: s.name,
-                value: formatValue(s.values[active]),
-              }))}
+              label={tipHeader(labels[active])}
+              rows={series.map((s) => {
+                const v = s.values[active];
+                return {
+                  color: s.color,
+                  label: s.name,
+                  value: v === null ? "—" : formatValue(v),
+                };
+              })}
               style={{
                 left: Math.max(90, Math.min(width - 90, MARGIN.left + activeX)),
                 top: 0,
@@ -146,6 +199,20 @@ export default function MultiLineChart({
           )
         }
       >
+        {band && bandX0 !== undefined && bandX1 !== undefined && (
+          <>
+            <rect
+              x={bandX0}
+              y={0}
+              width={Math.max(0, bandX1 - bandX0)}
+              height={ih}
+              fill="var(--hover)"
+            />
+            <text className="tick-label" x={bandX0 + 6} y={12}>
+              {band.label}
+            </text>
+          </>
+        )}
         <GridLines positions={yTicks.map(y)} length={iw} />
         {yTicks.map((t) => (
           <text
@@ -168,7 +235,7 @@ export default function MultiLineChart({
             y={ih + 20}
             textAnchor="middle"
           >
-            {labels[i]}
+            {formatXTick(labels[i])}
           </text>
         ))}
         {series.map((s, si) => (
@@ -182,7 +249,7 @@ export default function MultiLineChart({
             strokeLinecap="round"
           />
         ))}
-        {/* crosshair + active markers, one per series */}
+        {/* crosshair + active markers, one per series with a figure */}
         {active !== null && (
           <>
             <line
@@ -193,27 +260,32 @@ export default function MultiLineChart({
               stroke="var(--baseline)"
               strokeWidth={1}
             />
-            {series.map((s) => (
-              <circle
-                key={s.name}
-                cx={activeX}
-                cy={y(s.values[active])}
-                r={4.5}
-                fill={s.color}
-                stroke="var(--surface-1)"
-                strokeWidth={2}
-              />
-            ))}
+            {series.map((s) => {
+              const v = s.values[active];
+              return v === null ? null : (
+                <circle
+                  key={s.name}
+                  cx={activeX}
+                  cy={y(v)}
+                  r={4.5}
+                  fill={s.color}
+                  stroke="var(--surface-1)"
+                  strokeWidth={2}
+                />
+              );
+            })}
           </>
         )}
         {/* end markers + dodged value end labels (series names live in
             the legend; the label carries the value) */}
         {series.map((s, si) => {
-          const last = s.values[s.values.length - 1];
+          const i = ends[si];
+          if (i < 0) return null;
+          const last = s.values[i] as number;
           return (
             <g key={s.name}>
               <circle
-                cx={iw}
+                cx={x(labels[i])}
                 cy={y(last)}
                 r={4.5}
                 fill={s.color}

@@ -155,11 +155,21 @@ export default function App() {
               huggingface.co/{HF_NAMESPACE}
             </a>
             {" · "}
-            contains public sector information licensed under the{" "}
+            contains public sector information licensed under the Open
+            Government Licence{" "}
             <a href="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/">
-              Open Government Licence v3.0
+              v3.0
+            </a>{" "}
+            and{" "}
+            <a href="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/2/">
+              v2.0
             </a>
-            .
+            , and TfL data under the{" "}
+            <a href="https://tfl.gov.uk/corporate/terms-and-conditions/transport-data-service">
+              TfL Transport Data Service licence
+            </a>{" "}
+            (Powered by TfL Open Data). Each dashboard credits its own
+            sources and licence.
           </footer>
         </div>
       </div>

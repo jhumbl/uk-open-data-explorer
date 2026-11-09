@@ -77,6 +77,23 @@ export const DASHBOARDS: DashboardMeta[] = [
     load: () => import("./ulev-uptake/UlevUptakeDashboard"),
   },
   {
+    id: "transport-recovery",
+    title: "Journeys on London’s transport",
+    topic: "Transport",
+    source: "TfL · journeys by mode · 4-weekly",
+    question:
+      "Has London’s public transport come back since Covid — on which modes, and on which days?",
+    blurb:
+      "Journeys per day on every TfL mode since 2010, four-weekly, against 2018-19 — plus TfL's daily Underground and bus totals to show which days of the week have recovered.",
+    family: "tfl-journeys-by-mode",
+    files: [
+      "tfl_journeys_by_mode.parquet",
+      "tfl_network_daily_journeys.parquet",
+    ],
+    wide: true,
+    load: () => import("./transport-recovery/TransportRecoveryDashboard"),
+  },
+  {
     id: "london-trees",
     title: "London’s public trees",
     topic: "Environment",

@@ -10,6 +10,7 @@ renders the SVG, D3 does scales and shape math only. No `d3.select`,
 no other charting library. Exemplars to copy from:
 
 - Line chart: `src/components/charts/LineChart.tsx` (promoted 2026-07 when vehicle-fleet became its second consumer)
+- Multi-series line: `src/components/charts/MultiLineChart.tsx` (promoted 2026-11 from the gallery for transport-recovery; null gaps, optional labelled band, caller x-ticks auto-thinned on narrow widths; ≤4 series)
 - Vertical bars: `src/components/charts/CategoryBars.tsx` (promoted 2026-07; supports negative values below the baseline)
 - Ranked horizontal bars: `src/components/charts/RankedBars.tsx` (promoted 2026-07; data-driven axis, or `domainMax` to fix it)
   (steal the rounded-data-end path helpers from the bar charts)

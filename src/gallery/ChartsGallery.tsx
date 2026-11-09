@@ -7,8 +7,8 @@ import { tokenRgb } from "../components/map/basemapStyle";
 import usePrefersDark from "../components/map/usePrefersDark";
 import CategoryBars, { type CategoryBar } from "../components/charts/CategoryBars";
 import RankedBars, { type RankedBar } from "../components/charts/RankedBars";
-import MultiLineChart, { type Series } from "./MultiLineChart";
-import SmallMultiples from "./SmallMultiples";
+import MultiLineChart from "../components/charts/MultiLineChart";
+import SmallMultiples, { type Series } from "./SmallMultiples";
 import { StatRow, StatTile } from "../components/charts/StatTile";
 import Segmented from "../components/charts/Segmented";
 import Select from "../components/charts/Select";
@@ -697,7 +697,7 @@ export default function ChartsGallery() {
       </div>
 
       <div className="chart-card" style={{ marginTop: 16 }}>
-        <h3>Multi-series line — gallery/MultiLineChart + Legend</h3>
+        <h3>Multi-series line — components/charts/MultiLineChart + Legend</h3>
         <p className="chart-sub">
           2px lines in the validated categorical slots, legend above
           (mandatory for ≥2 series), shared crosshair with one tooltip

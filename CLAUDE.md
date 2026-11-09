@@ -43,6 +43,10 @@ it exposes are valuable.
   pipeline smoke-tests every published URL weekly, and this repo's
   `scripts/smoke_test.mjs` re-verifies the consumer path before every
   deploy and every Tuesday.
+- **Where documentation lives:** browser, CORS and DuckDB-Wasm
+  behaviour is documented HERE. The HF dataset cards deliberately
+  describe only the data and where it comes from — don't push consumer
+  notes upstream into them.
 
 When working here you usually won't have the pipeline repo checked out.
 Its CLAUDE.md is the authority on the data side; the facts this repo
@@ -173,6 +177,23 @@ Measured in-browser against the live HF files, 2026-07:
   each dashboard to a handful of queries per interaction. A dashboard
   that needs heavy repeated scans is the documented trigger to add an
   `_agg_` parquet upstream in the pipeline, not to hammer the big files.
+- **TfL / ORR transport files** (measured 2026-11-09):
+  - **`tfl_journeys_by_mode`** has 4-weekly periods of 26–32 days.
+    Always divide by `days_in_period`, and use `financial_year`, never
+    `tfl_period_label` (wrong for 2020-21). Its 'Elizabeth line' is
+    TfL Rail before May 2022, so it has no comparable pre-Covid
+    baseline. Overground is null before Oct 2010.
+  - **Bus counts don't reconcile across files.** In
+    `tfl_journeys_by_mode` they are boardings (2,220M in FY 2018-19);
+    in `tfl_network_daily_journeys` they are journeys (1,935M in 2019).
+    Never mix percentages from the two.
+  - **`tfl_station_footfall`** (6 MB) has only 2 row groups, so date
+    filters can't prune it. Load it whole into memory.
+  - **No station keys or coordinates anywhere.** Footfall↔ORR exact
+    name matches cover only 128 of 437 stations. A station crosswalk is
+    an upstream gap: don't name-match here.
+  - **Recovery anchors** (latest 13 periods vs 2018-19, per day): all
+    modes 87.6%, Bus 79.3%, Underground 86.9%.
 
 ## Invariants — do not break these
 
@@ -187,7 +208,9 @@ Measured in-browser against the live HF files, 2026-07:
 4. **Data + context is the product.** Every dashboard states the caveats
    that change how its chart is read (units, stock-vs-flow, coverage,
    comparability breaks), links its HF dataset repo and publisher, and
-   credits OGL v3.0. A chart whose caveats are missing is not done.
+   credits the publisher's licence (OGL v3.0 for most; the London
+   Datastore TfL series is OGL v2.0, and TfL API/Network Demand data
+   needs "Powered by TfL Open Data"). A chart whose caveats are missing is not done.
 5. **One dashboard failing must never take down the catalogue** — keep
    dashboards lazy-loaded and inside the ErrorBoundary; keep the
    catalogue page functional when catalog.json is unreachable.
