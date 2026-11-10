@@ -39,27 +39,40 @@ jobs:
 
   # Pages deployments intermittently stall server-side at
   # "syncing_files" and sit out deploy-pages' 10-minute default
-  # (2026-11, three times); a fresh attempt has always gone through in
-  # seconds. So: give up after 3 minutes (the action cancels its own
-  # deployment on timeout) and retry once from the same artifact.
+  # (2026-11, three times), and GitHub refuses a new deployment while an
+  # earlier one is still "in progress" on its side — even one its API
+  # already reports as finished (seen 2026-11-10, cleared on its own).
+  # A later attempt has always gone through. So: give up on an attempt
+  # after 3 minutes (the action cancels its own deployment on timeout),
+  # wait, and try again — three attempts, backing off 1 then 2 minutes.
   deploy:
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     environment:
       name: github-pages
-      url: ${{ steps.retry.outputs.page_url || steps.deployment.outputs.page_url }}
+      url: ${{ steps.third.outputs.page_url || steps.second.outputs.page_url || steps.first.outputs.page_url }}
     steps:
-      - id: deployment
+      - id: first
         uses: actions/deploy-pages@v5
         continue-on-error: true
         with:
           timeout: 180000
           # force_retry points the first attempt at a missing artifact,
-          # so it fails at once and the retry step runs for real.
+          # so it fails at once and the retries run for real.
           artifact_name: ${{ inputs.force_retry && 'no-such-artifact' || 'github-pages' }}
-      - id: retry
-        if: steps.deployment.outcome == 'failure'
+      - if: steps.first.outcome == 'failure'
+        run: sleep 60
+      - id: second
+        if: steps.first.outcome == 'failure'
+        uses: actions/deploy-pages@v5
+        continue-on-error: true
+        with:
+          timeout: 180000
+      - if: steps.first.outcome == 'failure' && steps.second.outcome == 'failure'
+        run: sleep 120
+      - id: third
+        if: steps.first.outcome == 'failure' && steps.second.outcome == 'failure'
         uses: actions/deploy-pages@v5
         with:
           timeout: 180000
