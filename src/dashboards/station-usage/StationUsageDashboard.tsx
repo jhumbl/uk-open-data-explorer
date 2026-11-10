@@ -51,7 +51,7 @@ const LOAD = `
   FROM read_parquet('${hfFileUrl(FAMILY, FILE)}')
 `;
 
-// Station locations (DRAFT map card, 2026-11-10): DfT NaPTAN rail
+// Station locations (the map card): DfT NaPTAN rail
 // stations, joined on ORR's TLC = NaPTAN's CRS. One row per NaPTAN
 // record, so dedupe to one active point per CRS (the pipeline's
 // documented rule, uk-open-data#1).
@@ -488,7 +488,7 @@ export default function StationUsageDashboard() {
           )}
         </div>
 
-        {/* DRAFT map card (2026-11-10) — awaiting the user's review.
+        {/* Map card (accepted 2026-11-10; charts skill · Maps).
             Circles are station-dimension members, so they click-filter
             (approved map rule); keyboard path = Station control + the
             rankings. */}

@@ -108,6 +108,19 @@ export const DASHBOARDS: DashboardMeta[] = [
     load: () => import("./station-usage/StationUsageDashboard"),
   },
   {
+    id: "station-recovery",
+    title: "London station recovery",
+    topic: "Transport",
+    source: "TfL · station footfall · daily",
+    question: "Which London stations are back to 2019 levels — and which aren’t?",
+    blurb:
+      "Daily entry and exit taps at TfL’s Underground, DLR, Overground and Elizabeth line gatelines since 2019 — each station’s latest 12 months against its 2019, by line, with the biggest rises and falls.",
+    family: "tfl-network-demand",
+    files: ["tfl_station_footfall.parquet", "tfl_stoppoint_footfall_crosswalk.parquet"],
+    wide: true,
+    load: () => import("./station-recovery/StationRecoveryDashboard"),
+  },
+  {
     id: "london-trees",
     title: "London’s public trees",
     topic: "Environment",

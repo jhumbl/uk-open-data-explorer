@@ -194,9 +194,23 @@ Measured in-browser against the live HF files, 2026-07:
     Never mix percentages from the two.
   - **`tfl_station_footfall`** (6 MB) has only 2 row groups, so date
     filters can't prune it. Load it whole into memory.
-  - **No station keys or coordinates anywhere.** Footfall↔ORR exact
-    name matches cover only 128 of 437 stations. A station crosswalk is
-    an upstream gap: don't name-match here.
+  - **Station keys come from upstream** (uk-open-data#1, 2026-11-10);
+    never name-match here. `dft-naptan/dft_naptan_rail_stations` gives
+    CRS + lat/lon (ORR `tlc = crs`; one row per NaPTAN record, so
+    `DISTINCT ON (crs) … WHERE status = 'active'`).
+    `tfl-network-demand/tfl_stoppoint_footfall_crosswalk` maps every
+    footfall `station` label to StopPoint IDs, a rename/interchange-stable
+    `station_group_id`, current `lines`/`modes` (bus routes and NR
+    operators mixed in; filter them) and a `crs` LIST (`unnest`; one
+    group can be several ORR stations, e.g. KGX + STP). It is compiled by
+    the pipeline, not TfL: handle `match = 'unmatched'` gracefully.
+  - **Footfall labels start mid-series** ('Paddington EL' Feb 2021, the
+    Reading branch Oct 2020, Battersea 2021). Any comparison with 2019
+    uses only labels counted through 2019 AND the latest year (419 of
+    438); summing a station group across new labels inflates the
+    Elizabeth line stations. Days are missing per label (closures, gaps):
+    average over days with a count. Anchors (latest 365 days vs 2019):
+    87.2% overall, weekdays 83.6%, weekends 101.9%.
   - **Recovery anchors** (latest 13 periods vs 2018-19, per day): all
     modes 87.6%, Bus 79.3%, Underground 86.9%.
 
