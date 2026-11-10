@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       force_retry:
-        description: "Test the retry path: first attempt times out after 1 s"
+        description: "Test the retry path: the first attempt is made to fail"
         type: boolean
         default: false
 
@@ -54,7 +54,10 @@ jobs:
         uses: actions/deploy-pages@v5
         continue-on-error: true
         with:
-          timeout: ${{ inputs.force_retry && 1000 || 180000 }}
+          timeout: 180000
+          # force_retry points the first attempt at a missing artifact,
+          # so it fails at once and the retry step runs for real.
+          artifact_name: ${{ inputs.force_retry && 'no-such-artifact' || 'github-pages' }}
       - id: retry
         if: steps.deployment.outcome == 'failure'
         uses: actions/deploy-pages@v5
