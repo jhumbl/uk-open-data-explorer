@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { loadTable, query } from "../../lib/duckdb";
 import { hfFileUrl, hfRepoUrl } from "../../lib/catalog";
 import { sqlString, useCrossFilter } from "../../lib/crossfilter";
+import { extendVocab, type VocabEntry } from "../../lib/vocab";
 import { fmtCompact, fmtDate, fmtInt, fmtPct, fmtPct0 } from "../../lib/format";
 import { StatRow, StatTile } from "../../components/charts/StatTile";
 import LoadingPanel from "../../components/charts/LoadingPanel";
@@ -36,8 +37,8 @@ import RecoveryMap, {
  *     7.60M taps a day); weekdays 83.6%, weekends 101.9%; 110 of 419
  *     labels at or above 2019; Tottenham Court Road 162%, Woolwich
  *     Arsenal DLR 38%.
- *   - Dimensions: line (TfL's 19 rail lines, from the pipeline's
- *     StopPoint crosswalk — current lines, not historical) and station
+ *   - Dimensions: line (TfL's rail lines — the crosswalk's tfl_lines,
+ *     19 today — from the pipeline's StopPoint crosswalk — current lines, not historical) and station
  *     (a footfall label). Line is a filter AND a clickable ranking;
  *     stations click from the rises/falls rankings. A station can sit on
  *     several lines, so picking one does not pin a line; changing line
@@ -72,7 +73,7 @@ const LOAD_FF = `
   WHERE station <> 'Unknown'
 `;
 const LOAD_X = `
-  SELECT station, lines, match, lat, lon
+  SELECT station, tfl_lines, match, lat, lon
   FROM read_parquet('${hfFileUrl(FAMILY, XWALK)}')
 `;
 // Per-label averages over days with a count, kept only where the label
@@ -92,38 +93,40 @@ const LOAD_LAB = `
      AND count(*) FILTER (WHERE d > since) >= ${MIN_LATEST_DAYS}
 `;
 
-/** TfL's rail lines, in the crosswalk's ids, with display names. The
-    crosswalk's `lines` also carries bus routes and National Rail
-    operators; only these are offered. Curated, so a line TfL adds or
-    renames is missing here until it is added. */
-const LINES: readonly { id: string; name: string }[] = [
-  { id: "bakerloo", name: "Bakerloo" },
-  { id: "central", name: "Central" },
-  { id: "circle", name: "Circle" },
-  { id: "district", name: "District" },
-  { id: "hammersmith-city", name: "Hammersmith & City" },
-  { id: "jubilee", name: "Jubilee" },
-  { id: "metropolitan", name: "Metropolitan" },
-  { id: "northern", name: "Northern" },
-  { id: "piccadilly", name: "Piccadilly" },
-  { id: "victoria", name: "Victoria" },
-  { id: "waterloo-city", name: "Waterloo & City" },
-  { id: "dlr", name: "DLR" },
-  { id: "elizabeth", name: "Elizabeth line" },
-  { id: "liberty", name: "Liberty" },
-  { id: "lioness", name: "Lioness" },
-  { id: "mildmay", name: "Mildmay" },
-  { id: "suffragette", name: "Suffragette" },
-  { id: "weaver", name: "Weaver" },
-  { id: "windrush", name: "Windrush" },
+/** Display names and order for TfL's lines, keyed by the crosswalk's
+    ids. Which lines exist comes from the crosswalk's `tfl_lines` (the
+    TfL-mode subset of `lines`, compiled upstream): a line missing here
+    still appears, under a name derived from its id (lib/vocab.ts). */
+const CURATED_LINES: readonly VocabEntry[] = [
+  { value: "bakerloo", label: "Bakerloo" },
+  { value: "central", label: "Central" },
+  { value: "circle", label: "Circle" },
+  { value: "district", label: "District" },
+  { value: "hammersmith-city", label: "Hammersmith & City" },
+  { value: "jubilee", label: "Jubilee" },
+  { value: "metropolitan", label: "Metropolitan" },
+  { value: "northern", label: "Northern" },
+  { value: "piccadilly", label: "Piccadilly" },
+  { value: "victoria", label: "Victoria" },
+  { value: "waterloo-city", label: "Waterloo & City" },
+  { value: "dlr", label: "DLR" },
+  { value: "elizabeth", label: "Elizabeth line" },
+  { value: "liberty", label: "Liberty" },
+  { value: "lioness", label: "Lioness" },
+  { value: "mildmay", label: "Mildmay" },
+  { value: "suffragette", label: "Suffragette" },
+  { value: "weaver", label: "Weaver" },
+  { value: "windrush", label: "Windrush" },
 ];
-const LINE_NAME = new Map(LINES.map((l) => [l.id, l.name]));
-const LINE_ID = new Map(LINES.map((l) => [l.name, l.id]));
+/** "hammersmith-city" → "Hammersmith city": readable until curated. */
+const lineFallback = (id: string): VocabEntry => ({
+  value: id,
+  label: (id.charAt(0).toUpperCase() + id.slice(1)).replace(/-/g, " "),
+});
 
 const LOAD_LINE = `
   SELECT x.station, u.line
-  FROM ${T_X} x, unnest(x.lines) AS u(line)
-  WHERE u.line IN (${LINES.map((l) => sqlString(l.id)).join(", ")})
+  FROM ${T_X} x, unnest(x.tfl_lines) AS u(line)
 `;
 const LOAD_MONTH = `
   SELECT station, date_trunc('month', d) AS m, we, avg(taps) AS a
@@ -151,7 +154,8 @@ const binRange = (i: number) =>
 const DIMS = ["line", "station"] as const;
 
 const LINE_ROW = 19;
-const LINE_RANK_HEIGHT = LINES.length * LINE_ROW + 52;
+/** Fixed for the page's lifetime: the line domain is set once at load. */
+const lineRankHeight = (n: number) => n * LINE_ROW + 52;
 const MOVER_ROWS = 10;
 const MOVER_ROW = 22;
 const MOVER_HEIGHT = MOVER_ROWS * MOVER_ROW + 52;
@@ -170,6 +174,8 @@ interface Lab {
 }
 interface Base {
   labs: Lab[];
+  /** Every line, curated order first (see CURATED_LINES). */
+  lines: VocabEntry[];
   /** Station label → TfL line ids serving it today. */
   linesOf: Map<string, string[]>;
   dataFrom: string;
@@ -210,7 +216,12 @@ async function loadBase(): Promise<Base> {
     ls.push(r.line);
     linesOf.set(r.station, ls);
   }
-  const order = new Map(LINES.map((l, i) => [l.id, i]));
+  const lines = extendVocab(
+    CURATED_LINES,
+    [...new Set(lineRows.map((r) => r.line))].sort(),
+    lineFallback,
+  );
+  const order = new Map(lines.map((l, i) => [l.value, i]));
   for (const ls of linesOf.values()) ls.sort((a, b) => order.get(a)! - order.get(b)!);
   const [meta] = await query<{
     dataFrom: string;
@@ -237,7 +248,7 @@ async function loadBase(): Promise<Base> {
     WHERE x.lat IS NOT NULL AND x.lon IS NOT NULL
     ORDER BY l.al DESC
   `);
-  return { labs, linesOf, ...meta, unmatched, points };
+  return { labs, lines, linesOf, ...meta, unmatched, points };
 }
 
 async function loadSeries(stations: string[] | null): Promise<MonthRow[]> {
@@ -272,7 +283,11 @@ export default function StationRecoveryDashboard() {
     };
   }, []);
 
-  const lineId = f.line ? (LINE_ID.get(f.line) ?? null) : null;
+  const LINES = base?.lines ?? CURATED_LINES;
+  const LINE_RANK_HEIGHT = lineRankHeight(LINES.length);
+  const lineIdOf = (name: string) => LINES.find((l) => l.label === name)?.value ?? null;
+  const lineNameOf = (id: string) => LINES.find((l) => l.value === id)?.label ?? id;
+  const lineId = f.line ? lineIdOf(f.line) : null;
   const onLine = (s: string, id: string) => base?.linesOf.get(s)?.includes(id) ?? false;
 
   // Line scope (the rises/falls, the spread, the table and the station
@@ -311,7 +326,7 @@ export default function StationRecoveryDashboard() {
 
   const setLine = (name: string | null) => {
     set("line", name);
-    const id = name ? LINE_ID.get(name) : null;
+    const id = name ? lineIdOf(name) : null;
     if (f.station && id && !onLine(f.station, id)) set("station", null);
   };
   const toggleStation = (name: string) => set("station", f.station === name ? null : name);
@@ -340,14 +355,14 @@ export default function StationRecoveryDashboard() {
   const fallRows = ranked.slice(ranked.length - nFall).reverse().map(toBar);
   const base19 = new Map(ranked.map((l) => [l.station, l.a19]));
   const lineList = (s: string) =>
-    (base?.linesOf.get(s) ?? []).map((id) => LINE_NAME.get(id)).join(", ") || "—";
+    (base?.linesOf.get(s) ?? []).map(lineNameOf).join(", ") || "—";
 
   // Lines facet: every line always present; drops both filters (the line
   // is its own dimension, and a station's peers are the point).
   const lineRows: RankedBar[] = LINES.map((ln) => {
-    const ls = base ? base.labs.filter((l) => onLine(l.station, ln.id)) : [];
+    const ls = base ? base.labs.filter((l) => onLine(l.station, ln.value)) : [];
     const a19 = sum(ls, "a19");
-    return { label: ln.name, value: a19 > 0 ? sum(ls, "al") / a19 : 0, count: ls.length };
+    return { label: ln.label, value: a19 > 0 ? sum(ls, "al") / a19 : 0, count: ls.length };
   }).sort((a, b) => b.value - a.value || a.label.localeCompare(b.label));
   const lineRank = f.line ? lineRows.findIndex((r) => r.label === f.line) + 1 : 0;
 
@@ -405,7 +420,7 @@ export default function StationRecoveryDashboard() {
             label="Filter by line"
             options={[
               { value: "", label: "All lines" },
-              ...LINES.map((l) => ({ value: l.name, label: l.name })),
+              ...LINES.map((l) => ({ value: l.label, label: l.label })),
             ]}
             value={f.line ?? ""}
             onChange={(v) => setLine(v === "" ? null : v)}
@@ -731,7 +746,9 @@ export default function StationRecoveryDashboard() {
             TfL&rsquo;s taps were within 10% of ORR&rsquo;s figure at 73 of 110
             such stations. At Underground interchanges and on the Elizabeth
             line west of London they count different gates, and can&rsquo;t be
-            compared or added.
+            compared or added. The{" "}
+            <a href={hfRepoUrl(FAMILY)}>crosswalk&rsquo;s documentation</a>{" "}
+            sets out the same relationship.
           </li>
           <li>
             Each figure is an <strong>average a day</strong> over the days with

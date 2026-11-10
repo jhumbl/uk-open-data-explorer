@@ -687,7 +687,9 @@ export default function StationUsageDashboard() {
             million taps against 5.32 million). Elsewhere the two measure
             different gates — the Underground&rsquo;s at interchanges, only the
             Elizabeth line&rsquo;s at Reading — so the gap between them means
-            nothing.
+            nothing. The{" "}
+            <a href={hfRepoUrl("tfl-network-demand")}>TfL station crosswalk&rsquo;s documentation</a>{" "}
+            sets out the same relationship.
           </li>
           <li>
             Station names, regions and local authorities are ORR&rsquo;s current
