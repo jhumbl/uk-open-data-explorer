@@ -38,20 +38,19 @@ jobs:
           path: dist
 
   # Pages deployments intermittently stall server-side at
-  # "syncing_files" and sit out deploy-pages' 10-minute default
-  # (2026-11, three times), and GitHub refuses a new deployment while an
-  # earlier one is still "in progress" on its side — even one its API
-  # already reports as finished (seen 2026-11-10, cleared on its own).
-  # A later attempt has always gone through. So: give up on an attempt
-  # after 3 minutes (the action cancels its own deployment on timeout),
-  # wait, and try again — three attempts, backing off 1 then 2 minutes.
+  # "syncing_files" (2026-11: four runs). Measured 2026-11-10: a stall
+  # is tied to the uploaded ARTIFACT — re-sending the same artifact
+  # stalled three times over 13 minutes, while a fresh run (fresh upload)
+  # went through in seconds straight after. So: give up on the first
+  # attempt after 3 minutes (the action cancels its own deployment on
+  # timeout), re-upload the same files as a new artifact, deploy that.
   deploy:
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     environment:
       name: github-pages
-      url: ${{ steps.third.outputs.page_url || steps.second.outputs.page_url || steps.first.outputs.page_url }}
+      url: ${{ steps.second.outputs.page_url || steps.first.outputs.page_url }}
     steps:
       - id: first
         uses: actions/deploy-pages@v5
@@ -59,20 +58,23 @@ jobs:
         with:
           timeout: 180000
           # force_retry points the first attempt at a missing artifact,
-          # so it fails at once and the retries run for real.
+          # so it fails at once and the retry path runs for real.
           artifact_name: ${{ inputs.force_retry && 'no-such-artifact' || 'github-pages' }}
       - if: steps.first.outcome == 'failure'
-        run: sleep 60
+        uses: actions/download-artifact@v8
+        with:
+          name: github-pages
+          path: retry
+      - if: steps.first.outcome == 'failure'
+        run: mkdir site && tar -xf retry/artifact.tar -C site
+      - if: steps.first.outcome == 'failure'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+          name: github-pages-retry
       - id: second
         if: steps.first.outcome == 'failure'
         uses: actions/deploy-pages@v5
-        continue-on-error: true
         with:
           timeout: 180000
-      - if: steps.first.outcome == 'failure' && steps.second.outcome == 'failure'
-        run: sleep 120
-      - id: third
-        if: steps.first.outcome == 'failure' && steps.second.outcome == 'failure'
-        uses: actions/deploy-pages@v5
-        with:
-          timeout: 180000
+          artifact_name: github-pages-retry
