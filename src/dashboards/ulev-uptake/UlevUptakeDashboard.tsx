@@ -65,7 +65,7 @@ const T_FLEET = "veh0105_fleet";
 const T_GEO = "veh_geo_regions";
 
 const LOAD_ULEV = `
-  SELECT ons_code, ons_geography, ons_sort, fuel, keepership, quarter, count
+  SELECT ons_code, ons_geography, ons_sort, region_code, fuel, keepership, quarter, count
   FROM read_parquet('${hfFileUrl(FAMILY, F_ULEV)}')
 `;
 // Denominators only: every licensed vehicle, publisher margins pinned.
@@ -79,23 +79,17 @@ const REGION_RE = "^(E12|W92|S92|N92)";
 /** The non-overlapping local-authority partition of the UK. */
 const LA_RE = "^(E06|E07|E08|E09|W06|S12|N09)";
 
-// The contract has no region column for local authorities, so membership
-// is derived from DfT's own presentation order: a carry-forward of the
-// last region heading over the hierarchically sorted latest-quarter
-// slice (verified 2026-07-17: 447 rows, unique ons_sort). The proper fix
-// is a region_code column upstream in the pipeline.
+// Region membership is the pipeline's region_code (derived upstream from
+// DfT's row order and checked every run; matched our old in-browser
+// derivation exactly, 2026-11-10: 361 LAs, 12 regions, constant across
+// quarters). Region and county rows carry it too, so scope to the LA
+// partition before using it.
 const LOAD_GEO = `
-  WITH slice AS (
-    SELECT ons_code, ons_geography,
-           last_value(CASE WHEN regexp_matches(ons_code, '${REGION_RE}') THEN ons_code END IGNORE NULLS)
-             OVER (ORDER BY ons_sort ROWS UNBOUNDED PRECEDING) AS region_code
-    FROM ${T_ULEV}
-    WHERE quarter = (SELECT max(quarter) FROM ${T_ULEV})
-      AND fuel = 'Total' AND keepership = 'Total'
-  )
   SELECT ons_code, ons_geography AS la_name, region_code
-  FROM slice
-  WHERE regexp_matches(ons_code, '${LA_RE}')
+  FROM ${T_ULEV}
+  WHERE quarter = (SELECT max(quarter) FROM ${T_ULEV})
+    AND fuel = 'Total' AND keepership = 'Total'
+    AND regexp_matches(ons_code, '${LA_RE}')
 `;
 
 /** DfT's fuel categories: raw value → chart/filter label → prose noun.
@@ -398,7 +392,7 @@ export default function UlevUptakeDashboard() {
     if (f.la && laByCode.get(f.la)?.region !== code) set("la", null);
   };
 
-  // Load both parquets and the derived region lookup once, then fetch
+  // Load both parquets and the region lookup once, then fetch
   // the region domain — the Select renders immediately with just "All"
   // and gains its options without moving.
   useEffect(() => {
@@ -891,8 +885,9 @@ export default function UlevUptakeDashboard() {
             summed with local-authority rows.
           </li>
           <li>
-            Region membership for local authorities is derived from
-            DfT&rsquo;s published presentation order.
+            DfT doesn&rsquo;t publish which region each local authority is
+            in; the uk-open-data pipeline derives it from the order of
+            DfT&rsquo;s table and checks it on every run.
           </li>
         </ul>
         <p>
