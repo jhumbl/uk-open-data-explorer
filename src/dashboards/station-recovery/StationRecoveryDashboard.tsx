@@ -418,7 +418,7 @@ export default function StationRecoveryDashboard() {
           value={rAll !== null ? fmtPct(rAll) : "—"}
           delta={
             base && rAll !== null
-              ? `${fmtCompact(totL)} a day in the latest 12 months, against ${fmtCompact(tot19)} in ${BASE_YEAR}`
+              ? `${fmtCompact(totL)} a day, against ${fmtCompact(tot19)} in ${BASE_YEAR}`
               : undefined
           }
         />
@@ -433,14 +433,14 @@ export default function StationRecoveryDashboard() {
             label="Rank by recovery"
             loading={pending}
             value={stationRank > 0 ? fmtInt(stationRank) : "—"}
-            delta={`of ${fmtInt(ranked.length)} comparable stations${onTheLine}`}
+            delta={`of ${fmtInt(ranked.length)} ${f.line ? "on this line" : "comparable stations"}`}
           />
         ) : (
           <StatTile
             label="Stations back to 2019"
             loading={pending}
             value={base ? `${fmtInt(above)} of ${fmtInt(ranked.length)}` : "—"}
-            delta={base ? `comparable stations${onTheLine} at or above their 2019 level` : undefined}
+            delta={base ? `stations${f.line ? " on this line" : ""} at or above their 2019 level` : undefined}
           />
         )}
         <StatTile
