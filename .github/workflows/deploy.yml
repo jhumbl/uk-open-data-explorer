@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      force_retry:
+        description: "Test the retry path: first attempt times out after 1 s"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -32,12 +37,26 @@ jobs:
         with:
           path: dist
 
+  # Pages deployments intermittently stall server-side at
+  # "syncing_files" and sit out deploy-pages' 10-minute default
+  # (2026-11, three times); a fresh attempt has always gone through in
+  # seconds. So: give up after 3 minutes (the action cancels its own
+  # deployment on timeout) and retry once from the same artifact.
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.retry.outputs.page_url || steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
         uses: actions/deploy-pages@v5
+        continue-on-error: true
+        with:
+          timeout: ${{ inputs.force_retry && 1000 || 180000 }}
+      - id: retry
+        if: steps.deployment.outcome == 'failure'
+        uses: actions/deploy-pages@v5
+        with:
+          timeout: 180000
