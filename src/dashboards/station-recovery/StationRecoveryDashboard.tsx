@@ -9,6 +9,13 @@ import Select from "../../components/charts/Select";
 import RankedBars, { type RankedBar } from "../../components/charts/RankedBars";
 import CategoryBars, { type CategoryBar } from "../../components/charts/CategoryBars";
 import MultiLineChart from "../../components/charts/MultiLineChart";
+import Legend from "../../components/charts/Legend";
+import RecoveryMap, {
+  ABOVE,
+  BELOW,
+  RECOVERY_MAP_HEIGHT,
+  type RecoveryPoint,
+} from "./RecoveryMap";
 
 /**
  * Which London stations are back to 2019 levels — and which aren't?
@@ -65,7 +72,7 @@ const LOAD_FF = `
   WHERE station <> 'Unknown'
 `;
 const LOAD_X = `
-  SELECT station, lines, match
+  SELECT station, lines, match, lat, lon
   FROM read_parquet('${hfFileUrl(FAMILY, XWALK)}')
 `;
 // Per-label averages over days with a count, kept only where the label
@@ -170,6 +177,8 @@ interface Base {
   windowFrom: string;
   totalLabels: number;
   unmatched: number;
+  /** Comparable stations with crosswalk coordinates, busiest first. */
+  points: RecoveryPoint[];
 }
 interface MonthRow {
   m: string;
@@ -222,7 +231,13 @@ async function loadBase(): Promise<Base> {
   );
   if (unmatched > 0)
     console.warn(`[station-recovery] ${unmatched} footfall label(s) unmatched in the crosswalk`);
-  return { labs, linesOf, ...meta, unmatched };
+  const points = await query<RecoveryPoint>(`
+    SELECT l.station AS name, x.lon, x.lat, l.al, l.al / l.a19 AS r
+    FROM ${T_LAB} l JOIN ${T_X} x USING (station)
+    WHERE x.lat IS NOT NULL AND x.lon IS NOT NULL
+    ORDER BY l.al DESC
+  `);
+  return { labs, linesOf, ...meta, unmatched, points };
 }
 
 async function loadSeries(stations: string[] | null): Promise<MonthRow[]> {
@@ -269,6 +284,17 @@ export default function StationRecoveryDashboard() {
   );
   const scopeLabs = f.station ? lineLabs.filter((l) => l.station === f.station) : lineLabs;
   const scopeKey = f.station ?? f.line ?? "";
+
+  // Map scope: the line's stations stay full-strength (and the camera
+  // frames them); everything else recedes.
+  const mapScope = useMemo(
+    () => (lineId ? new Set(lineLabs.map((l) => l.station)) : null),
+    [lineId, lineLabs],
+  );
+  const mapFocus = useMemo(
+    () => (base && mapScope ? base.points.filter((p) => mapScope.has(p.name)) : null),
+    [base, mapScope],
+  );
 
   useEffect(() => {
     if (!base) return;
@@ -484,6 +510,39 @@ export default function StationRecoveryDashboard() {
           )}
         </div>
 
+        {/* Map card (accepted 2026-11-10; charts skill · Maps).
+            Circles are station-dimension members, so they click-filter
+            (approved map rule); keyboard path = Station control + the
+            rankings. */}
+        <div className="chart-card full">
+          <h3>On the map</h3>
+          <p className="chart-sub">
+            Every comparable station, its circle&rsquo;s area proportional to
+            taps a day in the latest 12 months, coloured by whether it is
+            back to its {BASE_YEAR} level. Hover a circle for its figures;
+            click one to focus the page on that station.
+          </p>
+          <Legend
+            items={[
+              { label: `Below ${BASE_YEAR}`, color: `var(${BELOW})` },
+              { label: `At or above ${BASE_YEAR}`, color: `var(${ABOVE})` },
+            ]}
+          />
+          <div className="map-bleed">
+            {base ? (
+              <RecoveryMap
+                points={base.points}
+                inScope={mapScope}
+                station={f.station}
+                focus={mapFocus}
+                onSelectStation={toggleStation}
+              />
+            ) : (
+              <LoadingPanel height={RECOVERY_MAP_HEIGHT} />
+            )}
+          </div>
+        </div>
+
         <div className="chart-card">
           <h3>Recovery by line</h3>
           <p className="chart-sub">
@@ -697,6 +756,12 @@ export default function StationRecoveryDashboard() {
               ? `; ${base.unmatched} name(s) are currently unmatched and appear only under All lines`
               : ""}
             .
+          </li>
+          <li>
+            Map locations are the crosswalk&rsquo;s TfL StopPoint coordinates.
+            Station names that share a building (Canary Wharf&rsquo;s
+            Underground and DLR gates, say) sit on the same spot, the larger
+            circle underneath.
           </li>
           <li>
             March 2020 to February 2022 (shaded) were shaped by Covid

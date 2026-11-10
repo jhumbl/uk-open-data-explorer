@@ -380,6 +380,18 @@ trade-offs to revisit in a refinement pass: dense metros (London) fuse
 into one mass at national zoom (the region filter is the relief), most
 marks sit at the floor, strokes read busy in dark mode.
 
+**Two-class colour on proportional symbols (accepted, user 2026-11-10,
+exemplar: station-recovery RecoveryMap).** When a second variable is a
+threshold question (below vs at-or-above 2019), colour the circles in
+two classes with a two-swatch `Legend` above the map, size still
+carrying volume. Pick slots the page has NOT already given meaning
+(that page's blue/green are weekdays/weekends, so magenta `--series-3`
+= below, yellow `--series-4` = at or above). Fill alpha 150 in scope /
+18 out, stroke 235 / 50. A graded diverging scale is the open
+alternative — a new palette, so it waits for the site-wide colour
+review. Known trade-off: yellow small circles are faint on the light
+basemap.
+
 **The map-first archetype (settled 2026-07-19, exemplar:
 london-trees).** For datasets that ARE a map (row payload =
 coordinates + attributes, no time dimension): registry `mapPage: true`
