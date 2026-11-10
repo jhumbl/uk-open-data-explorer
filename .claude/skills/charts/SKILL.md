@@ -366,8 +366,19 @@ prefers-reduced-motion; the no-transitions rule is about data marks,
 not the camera). `focusBounds` is keyed by value, so a re-query that
 leaves the extent unchanged never yanks a camera the visitor has moved;
 between flights the visitor still owns the camera. The gallery's
-member-bubble map keeps its static camera — fly-to has only been
-approved for row-detail point maps so far.
+member-bubble map keeps its static camera. Fly-to on a member map
+(marks are filters) was accepted "for now" with the station map
+(2026-11-10): the camera frames the selected region's extent.
+
+**Proportional symbols (accepted "for now", user 2026-11-10, exemplar:
+station-usage StationMap).** Circle AREA ∝ value (radius = R_MAX ·
+√(v/max), floor 1.5px), pixel units so size holds across zoom, one hue
+(`--series-1`), thin same-hue stroke on every circle, draw largest-first
+so small marks stay hoverable inside dense clusters, R_MAX 16px. No
+size key yet (the subtitle states "area ∝ value"). Known, accepted
+trade-offs to revisit in a refinement pass: dense metros (London) fuse
+into one mass at national zoom (the region filter is the relief), most
+marks sit at the floor, strokes read busy in dark mode.
 
 **The map-first archetype (settled 2026-07-19, exemplar:
 london-trees).** For datasets that ARE a map (row payload =

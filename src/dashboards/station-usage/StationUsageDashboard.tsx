@@ -13,6 +13,7 @@ import LoadingPanel from "../../components/charts/LoadingPanel";
 import Select from "../../components/charts/Select";
 import RankedBars, { type RankedBar } from "../../components/charts/RankedBars";
 import MultiLineChart from "../../components/charts/MultiLineChart";
+import StationMap, { STATION_MAP_HEIGHT, type StationPoint } from "./StationMap";
 
 /**
  * Which stations carry Britain's rail passengers — and how has that
@@ -46,8 +47,21 @@ const FILE = "orr_1415_station_usage.parquet";
 const T = "orr_station_usage";
 
 const LOAD = `
-  SELECT financial_year, station_name, region, entries_exits, interchanges
+  SELECT financial_year, station_name, tlc, region, entries_exits, interchanges
   FROM read_parquet('${hfFileUrl(FAMILY, FILE)}')
+`;
+
+// Station locations (DRAFT map card, 2026-11-10): DfT NaPTAN rail
+// stations, joined on ORR's TLC = NaPTAN's CRS. One row per NaPTAN
+// record, so dedupe to one active point per CRS (the pipeline's
+// documented rule, uk-open-data#1).
+const NAPTAN = { family: "dft-naptan", file: "dft_naptan_rail_stations.parquet" };
+const T_NAPTAN = "naptan_rail_points";
+const LOAD_NAPTAN = `
+  SELECT DISTINCT ON (crs) crs, lat, lon
+  FROM read_parquet('${hfFileUrl(NAPTAN.family, NAPTAN.file)}')
+  WHERE status = 'active' AND crs IS NOT NULL AND lat IS NOT NULL
+  ORDER BY crs, atco_code
 `;
 
 const DIMS = ["region", "station"] as const;
@@ -223,6 +237,8 @@ export default function StationUsageDashboard() {
   const [stationOpts, setStationOpts] = useState<StationOption[]>([]);
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [mapPoints, setMapPoints] = useState<StationPoint[] | null>(null);
+  const [mapError, setMapError] = useState<string | null>(null);
 
   // The hierarchy stays coherent: a station pins its region; changing
   // region (bar or click) drops a station outside it.
@@ -258,6 +274,29 @@ export default function StationUsageDashboard() {
       setRegionNames(regs.map((r) => r.name));
       setStationOpts(sts);
     })().catch((e: Error) => !cancelled && setError(e.message));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Map points once: every station with a latest-year figure and a
+  // NaPTAN location, largest first (the draw order). A NaPTAN failure
+  // degrades only the map card, never the rest of the page.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      await loadTable(T, LOAD);
+      await loadTable(T_NAPTAN, LOAD_NAPTAN);
+      const pts = await query<StationPoint>(`
+        SELECT o.station_name AS name, o.region, p.crs, p.lon, p.lat,
+               o.entries_exits AS ee
+        FROM ${T} o JOIN ${T_NAPTAN} p ON p.crs = o.tlc
+        WHERE o.financial_year = (SELECT max(financial_year) FROM ${T})
+          AND o.entries_exits > 0
+        ORDER BY o.entries_exits DESC
+      `);
+      if (!cancelled) setMapPoints(pts);
+    })().catch((e: Error) => !cancelled && setMapError(e.message));
     return () => {
       cancelled = true;
     };
@@ -449,6 +488,39 @@ export default function StationUsageDashboard() {
           )}
         </div>
 
+        {/* DRAFT map card (2026-11-10) — awaiting the user's review.
+            Circles are station-dimension members, so they click-filter
+            (approved map rule); keyboard path = Station control + the
+            rankings. */}
+        <div className="chart-card full">
+          <h3>On the map</h3>
+          <p className="chart-sub">
+            Every station with a figure in {data ? data.fy : "the latest year"},
+            its circle&rsquo;s area proportional to entries and exits. Hover
+            a circle for its figure; click one to focus the page on that
+            station.
+          </p>
+          <div className="map-bleed">
+            {mapPoints ? (
+              <StationMap
+                points={mapPoints}
+                region={f.region}
+                station={f.station}
+                onSelectStation={(name) => {
+                  if (f.station === name) set("station", null);
+                  else setStation(name);
+                }}
+              />
+            ) : mapError ? (
+              <div className="notice" role="alert" style={{ margin: 20 }}>
+                <strong>Station locations failed to load.</strong> {mapError}
+              </div>
+            ) : (
+              <LoadingPanel height={STATION_MAP_HEIGHT} />
+            )}
+          </div>
+        </div>
+
         <div className="chart-card">
           <h3>Regions, ranked</h3>
           <p className="chart-sub">
@@ -611,12 +683,24 @@ export default function StationUsageDashboard() {
             region: they count in Britain&rsquo;s totals but not in any region,
             and only stations with a figure in the latest year can be picked.
           </li>
+          <li>
+            Station locations are DfT&rsquo;s NaPTAN records, matched on the
+            three-letter station code. The map shows the stations with a
+            figure in the latest year; closed stations, which have no code,
+            are not mapped.
+          </li>
         </ul>
         <p>
           Data: <a href={hfRepoUrl(FAMILY)}>{FAMILY} on Hugging Face</a> (ORR
           Table 1415) · published by the{" "}
           <a href="https://dataportal.orr.gov.uk/statistics/usage/estimates-of-station-usage">
             Office of Rail and Road
+          </a>{" "}
+          under OGL v3.0. Station locations:{" "}
+          <a href={hfRepoUrl(NAPTAN.family)}>{NAPTAN.family} on Hugging Face</a>{" "}
+          · DfT{" "}
+          <a href="https://www.gov.uk/government/publications/national-public-transport-access-node-schema">
+            NaPTAN
           </a>{" "}
           under OGL v3.0.
         </p>
