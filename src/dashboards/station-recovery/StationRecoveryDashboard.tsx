@@ -724,6 +724,16 @@ export default function StationRecoveryDashboard() {
             National Rail gates where TfL doesn&rsquo;t run them.
           </li>
           <li>
+            <strong>ORR&rsquo;s station estimates</strong> (from ticket sales)
+            are a different measure, not a second share of the same traffic.
+            Where both cover the same gates — Overground and Elizabeth line
+            stations without the Underground — they agree closely: in 2024-25
+            TfL&rsquo;s taps were within 10% of ORR&rsquo;s figure at 73 of 110
+            such stations. At Underground interchanges and on the Elizabeth
+            line west of London they count different gates, and can&rsquo;t be
+            compared or added.
+          </li>
+          <li>
             Each figure is an <strong>average a day</strong> over the days with
             a published count — {BASE_YEAR} against {windowPhrase}. Missing
             days (closures, data gaps) are left out rather than counted as zero.

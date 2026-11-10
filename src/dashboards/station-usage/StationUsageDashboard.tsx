@@ -678,6 +678,18 @@ export default function StationUsageDashboard() {
             (shaded) reflect Covid restrictions — not a baseline.
           </li>
           <li>
+            <strong>TfL&rsquo;s gate counts are a check.</strong> At stations
+            where TfL runs the gates and only Overground or Elizabeth line
+            trains call, TfL&rsquo;s gate taps for 2024-25 count the same
+            passengers by a different method, and usually land close to these
+            estimates: within 10% at 73 of 110 such stations, and typically a
+            little lower (West Ealing 2.55 million both; Hackney Central 5.49
+            million taps against 5.32 million). Elsewhere the two measure
+            different gates — the Underground&rsquo;s at interchanges, only the
+            Elizabeth line&rsquo;s at Reading — so the gap between them means
+            nothing.
+          </li>
+          <li>
             Station names, regions and local authorities are ORR&rsquo;s current
             edition applied to every year. The 71 closed stations have no
             region: they count in Britain&rsquo;s totals but not in any region,
