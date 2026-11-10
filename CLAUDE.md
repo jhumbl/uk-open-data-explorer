@@ -165,7 +165,10 @@ Measured in-browser against the live HF files, 2026-07:
   publisher's own aggregate rows (pin margins to `'Total'`, take
   `ons_code = 'K02000001'` for the UK), or scope to the non-overlapping
   LA partition: `regexp_matches(ons_code, '^(E06|E07|E08|E09|W06|S12|N09)')`
-  with margins pinned. Counts are a **stock** (licensed at quarter end),
+  with margins pinned. An LA's region is the pipeline's `region_code`
+  (derived upstream from DfT's row order, checked every run): region,
+  county and "unknown within" rows carry it too, so apply the LA
+  partition before grouping by it. Counts are a **stock** (licensed at quarter end),
   not a flow. Sanity anchors: ~41.5M vehicles, ~2.79M ULEVs (2025 Q4).
   And VEH0105's `count_thousands` is in THOUSANDS; VEH0132's `count` is
   units. `fuel` and `body_type` are **open vocabularies** that DfT
