@@ -201,7 +201,8 @@ Measured in-browser against the live HF files, 2026-07:
     `tfl-network-demand/tfl_stoppoint_footfall_crosswalk` maps every
     footfall `station` label to StopPoint IDs, a rename/interchange-stable
     `station_group_id`, current `lines`/`modes` (bus routes and NR
-    operators mixed in; filter them) and a `crs` LIST (`unnest`; one
+    operators mixed in — for TfL lines use `tfl_lines`, the TfL-mode
+    subset, through `lib/vocab.ts`) and a `crs` LIST (`unnest`; one
     group can be several ORR stations, e.g. KGX + STP). It is compiled by
     the pipeline, not TfL: handle `match = 'unmatched'` gracefully.
   - **Footfall labels start mid-series** ('Paddington EL' Feb 2021, the
